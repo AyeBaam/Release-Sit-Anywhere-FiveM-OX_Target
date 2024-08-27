@@ -1,0 +1,116 @@
+/**
+ 
+Copyright (c) 2024 AyeBaam Discord:AyeBaam
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, BUT NOT TO EVER SELL
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+*
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+*
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+local sitting = false
+local laying = false
+local currentObj = nil
+
+local function adjustPlayerPosition(playerPed, objCoords, objHeading, zOffset)
+    SetEntityCoords(playerPed, objCoords.x, objCoords.y, objCoords.z + zOffset, false, false, false, false)
+    SetEntityHeading(playerPed, objHeading + 180.0)
+end
+
+local function sitOnObject(object)
+    if sitting or laying then return end
+    
+    sitting = true
+    currentObj = object
+    local playerPed = PlayerPedId()
+    local objCoords = GetEntityCoords(object)
+    local objHeading = GetEntityHeading(object)
+    
+    adjustPlayerPosition(playerPed, objCoords, objHeading, 0.5)
+    TaskStartScenarioAtPosition(playerPed, "PROP_HUMAN_SEAT_CHAIR", objCoords.x, objCoords.y, objCoords.z + 0.5, objHeading + 180.0, -1, true, true)
+end
+
+local function layOnBed(object)
+    if sitting or laying then return end
+    
+    laying = true
+    currentObj = object
+    local playerPed = PlayerPedId()
+    local objCoords = GetEntityCoords(object)
+    local objHeading = GetEntityHeading(object)
+    
+    adjustPlayerPosition(playerPed, objCoords, objHeading, 0.7)
+    
+    RequestAnimDict("anim@gangops@morgue@table@")
+    while not HasAnimDictLoaded("anim@gangops@morgue@table@") do
+        Wait(0)
+    end
+    TaskPlayAnim(playerPed, "anim@gangops@morgue@table@", "body_search", 8.0, -8.0, -1, 1, 0, false, false, false)
+end
+
+local function standUp()
+    if not sitting and not laying then return end
+    
+    local playerPed = PlayerPedId()
+    ClearPedTasks(playerPed)
+    
+    local playerPos = GetEntityCoords(playerPed)
+    SetEntityCoords(playerPed, playerPos.x, playerPos.y, playerPos.z + 0.2, false, false, false, false)
+    
+    sitting = false
+    laying = false
+    currentObj = nil
+end
+
+-- Sit on object
+exports.ox_target:addGlobalObject({
+    {
+        name = 'sit_on_object',
+        icon = 'fas fa-chair',
+        label = 'Sit',
+        canInteract = function(entity, distance, coords, name)
+            return not sitting and not laying and distance < 2.0
+        end,
+        onSelect = function(data)
+            sitOnObject(data.entity)
+        end
+    }
+})
+
+-- Bed model hashes
+local bedHashes = {
+    [`v_med_bed1`] = true,
+    [`v_med_bed2`] = true,
+    -- Add more bed model hashes here
+}
+
+-- Lay on bed
+exports.ox_target:addGlobalObject({
+    {
+        name = 'lay_on_bed',
+        icon = 'fas fa-bed',
+        label = 'Lay Down',
+        canInteract = function(entity, distance, coords, name)
+            local model = GetEntityModel(entity)
+            return bedHashes[model] and not sitting and not laying and distance < 2.0
+        end,
+        onSelect = function(data)
+            layOnBed(data.entity)
+        end
+    }
+})
+
+RegisterCommand('getup', standUp, false)
+RegisterKeyMapping('getup', 'Get up from sitting or laying', 'keyboard', 'X')
